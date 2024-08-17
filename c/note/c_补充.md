@@ -1,6 +1,6 @@
 ## 关于main函数的参数
 
-int main(int argc, char *argv[])
+int main(int argc, char *argv[], char *envp[]);
 
 ## 关于字面量的后缀
 
