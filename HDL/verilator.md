@@ -19,9 +19,9 @@ PA1（(Programming Assignment）说的是NEMU（NJU EMUlator）南大硬件仿�
 
 **HDL**
 
-**NEMU**
+**NEMU** 南大硬件仿真器
 
-NPC应该是HDL里的内容
+NPC 设计自己的处理器
 
 # verilator
 
@@ -36,24 +36,24 @@ verilator并不像其他数电仿真器一样，输入HDL工程和testbench就�
 该命令会在根据top.v当前工作目录生成一个obj_dir文件夹
 
 ```
-verilator --cc top.v
+verilator --Wall --trace -cc top.v --exe testbench.cpp
 ```
 
---cc是指定verilater将HDL工程转译成c++语言
+--Wall 开启所有警告
 
-相对的你也可以使用--sc指定转译成system c语言
+--trace 开启波形跟踪
 
-并在后面指定HDL文件
+**--trace-fst 添加该指令以确保提供的api兼容fst波形格式的生成**
 
+--cc 指定verilater将HDL工程转译成c++语言。相对的，你也可以使用--sc指定转译成system c语言
 
+并在--cc后面指定HDL文件
 
-该命令会在上面的基础上追加.mk文件，这是makefile文件。可以用这个直接构建整个工程了。
+--exe 根据后面的testbench生成用于仿真的可执行文件，该参数的对生成文件的影响是，在maekfile里添加对testbench的构建。
 
-```
-verilator --Wall --trace --cc top.v --exe testbench.cpp
-```
+(不加testbench的意义在哪？？，输出波形文件，输入激励，啥啥干不了)
 
-
+### 构建工程
 
 ```
 make -C obj_dir -f V<top>.mk V<top>
@@ -72,6 +72,10 @@ make -C obj_dir -f V<top>.mk V<top>
 波形图是在执行testbench可执行文件时同时生成的。testbench中，我们用verilator提供的包（API），在仿真环节的前后设置监测，并在最终生成一个二值波形文件。
 
 这个文件通常是.vcd格式也可以是.fst格式，但是ysyx讲义建议使用.fst
+
+- VCD 标准波形文件，所有仿真器都必须支持
+- fsdb Verdi支持
+- WLF modelsim产生
 
 >  生成FST格式的波形
 >
@@ -113,10 +117,10 @@ gtkwave <波形文件> #查看生成后的波形
 #include <verilated_vcd_c.h>
 
 //声明HDL工程转换后的c++类的的头文件，对应Valu.c
-#include "Valu.h"
+#include "Vtop.h"
 
 //system verilog特有的的数据类型的声明
-#include "Valu___024unit.h"
+#include "Vtop___024unit.h"
 
 //设置仿真的周期数
 #define MAX_SIM_TIME 20
@@ -130,7 +134,7 @@ int main(int argc, char* argv[], char* env[]) {
     Verilated::commandArgs(argc, argv);
     
     //例化HDL的顶层模块
-    Valu *dut = new Valu;
+    Vtop *top = new Vtop;
 	
     //开启波形监测
     Verilated::traceEverOn(true);
@@ -139,7 +143,7 @@ int main(int argc, char* argv[], char* env[]) {
     VerilatedVcdC *m_trace = new VerilatedVcdC;
     
     //用m_trace监测dut 第二个参数是的是深度
-    dut->trace(m_trace, 5);
+    top->trace(m_trace, 5);
     
     //将监测的波形保存为.vcd文件
     m_trace->open("waveform.vcd");
@@ -148,12 +152,12 @@ int main(int argc, char* argv[], char* env[]) {
     while (sim_time < MAX_SIM_TIME) {
         
         ///每一周期翻转时钟信号
-        dut->clk ^= 1;
+        top->clk ^= 1;
         
         //为什么没有激励信号？？？
         
         //HDL电路工作，更新响应信号
-        dut->eval();
+        top->eval();
         
         //将被监测的响应信号写入波形中
         m_trace->dump(sim_time);
@@ -166,7 +170,8 @@ int main(int argc, char* argv[], char* env[]) {
     m_trace->close();
     
     //释放dut在堆的内存
-    delete dut;
+    delete top;
+    delete m_trace;
     
     //退出程序，返回相应值
     exit(EXIT_SUCCESS);
@@ -177,19 +182,19 @@ int main(int argc, char* argv[], char* env[]) {
 如果想要生成fst格式的波形文件`#include "verilated_fst_c.h"`就可以了
 
 ```c++
-#include "Vcounter.h"              // Verilator 生成的 C++ 模型类
+#include "Vtop.h"              // Verilator 生成的 C++ 模型类
 #include "verilated.h"             // Verilator 的核心仿真库
 #include "verilated_fst_c.h"       // Verilator 的 FST 支持库
 
 int main(int argc, char** argv) {
     Verilated::commandArgs(argc, argv);  // 初始化 Verilator 参数
 
-    Vcounter* top = new Vcounter;        // 创建 Verilog 模块的 C++ 实例
-    VerilatedFstC* tfp = new VerilatedFstC;  // 创建 FST 跟踪对象
+    Vtop* top = new Vtop;        // 创建 Verilog 模块的 C++ 实例
+    VerilatedFstC* m_trace = new VerilatedFstC;  // 创建 FST 跟踪对象
 
     Verilated::traceEverOn(true);        // 启用波形跟踪功能
     top->trace(tfp, 99);                 // 将 FST 对象连接到仿真模块，99 是跟踪深度
-    tfp->open("dump.fst");               // 打开并创建一个名为 "dump.fst" 的 FST 文件
+    m_trace->open("dump.fst");               // 打开并创建一个名为 "dump.fst" 的 FST 文件
 
     // 初始化输入信号
     top->clk = 0;
@@ -204,20 +209,22 @@ int main(int argc, char** argv) {
         tfp->dump(i);                    // 将当前周期的波形数据记录到 FST 文件中
     }
 
-    tfp->close();                        // 关闭 FST 文件
+    m_trace->close();                        // 关闭 FST 文件
     top->final();                        // 终止仿真，进行必要的清理
     delete top;                          // 释放模块实例对象
-    delete tfp;                          // 释放 FST 对象
+    delete m_trace;                          // 释放 FST 对象
     return 0;
 }
 
 ```
 
-函数是完全一样的。
+函数是相似的。
 
 ### obj_dir
 
 这个文件夹是verilator后，将所有目标文件都放到了此处。如果要仿真，必须要知道都生成了哪些文件
+
+##### HDL工程转译的cpp文件
 
 V<top>.cpp
 
@@ -229,7 +236,7 @@ V<top>_Syms.cpp
 
 V<top>_Syms.h
 
-
+##### makefile文件，用于构建整个仿真工程
 
 V<top>.mk
 
